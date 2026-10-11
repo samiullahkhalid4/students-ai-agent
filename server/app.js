@@ -7,12 +7,11 @@ import { createMemory } from "./agents/memory.js";
 import { createAgentController } from "./agents/controller.js";
 import { createStudyRoutes } from "./routes/studyRoutes.js";
 import { AppError } from "./services/errors.js";
-import { serverDir } from "./config.js";
+import { serverDir, MAX_FILE_BYTES } from "./config.js";
 import { createWriteLimiter } from "./services/rateLimit.js";
 
-export function createApp({ db, provider, aiConfigured = true }) {
+export function createApp({ db, memory = createMemory(db), provider, aiConfigured = true, serveClient = true }) {
   const app = express();
-  const memory = createMemory(db);
   const controller = createAgentController({ memory, provider });
   app.disable("x-powered-by");
   app.use(helmet());
@@ -23,6 +22,8 @@ export function createApp({ db, provider, aiConfigured = true }) {
       aiConfigured,
       provider: provider.name,
       model: provider.model,
+      maxFileBytes: MAX_FILE_BYTES,
+      storage: memory.storage || "local",
     }),
   );
   app.use("/api/study", createWriteLimiter(), createStudyRoutes({ memory, controller }));
@@ -30,7 +31,7 @@ export function createApp({ db, provider, aiConfigured = true }) {
     res.status(404).json({ error: "API route not found.", code: "NOT_FOUND" }),
   );
   const clientDist = path.resolve(serverDir, "../client/dist");
-  if (existsSync(path.join(clientDist, "index.html"))) {
+  if (serveClient && existsSync(path.join(clientDist, "index.html"))) {
     app.use(express.static(clientDist));
     app.get("/{*path}", (req, res) =>
       res.sendFile(path.join(clientDist, "index.html")),
@@ -41,7 +42,7 @@ export function createApp({ db, provider, aiConfigured = true }) {
     if (error instanceof multer.MulterError) {
       const message =
         error.code === "LIMIT_FILE_SIZE"
-          ? "This file is too large. Maximum upload size is 10 MB."
+          ? `This file is too large. Maximum upload size is ${MAX_FILE_BYTES / 1024 / 1024} MB.`
           : "Upload one lecture file with your name and subject.";
       return res
         .status(error.code === "LIMIT_FILE_SIZE" ? 413 : 400)
@@ -65,7 +66,7 @@ export function createApp({ db, provider, aiConfigured = true }) {
           error: "Request body is too large.",
           code: "REQUEST_TOO_LARGE",
         });
-    if (error.code === "ERR_SQLITE_ERROR")
+    if (error.code === "ERR_SQLITE_ERROR" || error.name === "LibsqlError")
       return res.status(500).json({
         error: "Study memory is unavailable. Check the database location and available disk space, then try again.",
         code: "DATABASE_ERROR",

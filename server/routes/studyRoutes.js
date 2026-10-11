@@ -66,7 +66,7 @@ export function createStudyRoutes({ memory, controller }) {
       );
     const { name, subject } = validate(uploadFields, req.body);
     const lectureText = await extractLecture(req.file);
-    const session = memory.saveStudySession({
+    const session = await memory.saveStudySession({
       name,
       subject,
       filename: sanitizeFilename(req.file.originalname),
@@ -78,24 +78,24 @@ export function createStudyRoutes({ memory, controller }) {
     const { sessionId, task } = validate(generateFields, req.body);
     res.json(await controller.generate(sessionId, task));
   });
-  router.get("/session/:id/status", (req, res) =>
-    res.json(controller.getStatus(parseId(req.params.id))),
+  router.get("/session/:id/status", async (req, res) =>
+    res.json(await controller.getStatus(parseId(req.params.id))),
   );
-  router.get("/sessions", (req, res) =>
-    res.json({ sessions: memory.listStudySessions() }),
+  router.get("/sessions", async (req, res) =>
+    res.json({ sessions: await memory.listStudySessions() }),
   );
-  router.get("/session/:id/history", (req, res) => {
-    const session = memory.getStudySession(parseId(req.params.id));
+  router.get("/session/:id/history", async (req, res) => {
+    const session = await memory.getStudySession(parseId(req.params.id));
     res.json({ outputs: session.outputs, quizResults: session.quizResults });
   });
-  router.get("/session/:id", (req, res) =>
-    res.json({ session: memory.getStudySession(parseId(req.params.id)) }),
+  router.get("/session/:id", async (req, res) =>
+    res.json({ session: await memory.getStudySession(parseId(req.params.id)) }),
   );
-  router.post("/quiz-score", (req, res) => {
+  router.post("/quiz-score", async (req, res) => {
     const { sessionId, outputId, answers } = validate(quizFields, req.body);
     res
       .status(201)
-      .json({ result: memory.saveQuizResult(sessionId, outputId, answers) });
+      .json({ result: await memory.saveQuizResult(sessionId, outputId, answers) });
   });
   return router;
 }

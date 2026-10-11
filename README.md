@@ -59,9 +59,50 @@ npm run dev:client
 
 The upload and saved-session endpoints work without a key. Generation returns an actionable configuration message until a key is set. Restart the backend after editing `.env`.
 
+## Deploy to Vercel with Turso
+
+The React frontend and Express API must both be deployed. `vercel.json` builds `client/dist` and routes `/api/*` to `api/index.js`. The Vercel entry exports a request handler; it does not start a long-running HTTP listener.
+
+Vercel cannot persist a writable local SQLite file across function instances. This deployment uses Turso (hosted SQLite) for lectures, outputs, quiz results, progress, and generation locks. Local `npm run dev` continues using `server/db/study.sqlite`. See [Vercel's SQLite guidance](https://vercel.com/kb/guide/is-sqlite-supported-in-vercel).
+
+1. Create a database in your [Turso account](https://turso.tech/) and obtain its URL and a read/write auth token. If using the Turso CLI after signing in:
+
+   ```bash
+   turso db create students-ai-agent
+   turso db show students-ai-agent --url
+   turso db tokens create students-ai-agent
+   ```
+
+2. In the Vercel project settings, set **Root Directory to the repository root** (leave it empty/default, not `client`). Use **Vite**, **Install Command `npm ci`**, **Build Command `npm run build`**, and **Output Directory `client/dist`**. Use Node.js **22.x** or newer and enable **Fluid compute**. These build commands are also supplied in `vercel.json`.
+3. Add the following Vercel environment variables for **Production**, and for **Preview** if needed:
+
+   | Variable | Value |
+   | --- | --- |
+   | `AI_PROVIDER` | `gemini` |
+   | `GEMINI_MODEL` | `gemini-3.5-flash-lite` |
+   | `GEMINI_API_KEY` | Your Gemini API key |
+   | `TURSO_DATABASE_URL` | The `libsql://…` URL from Turso |
+   | `TURSO_AUTH_TOKEN` | Your database read/write token |
+
+   Do not use a `VITE_` prefix for these secrets. Local `server/.env` is intentionally excluded from Git and is not transferred to Vercel. The tables initialize automatically on the first API request; existing local sessions are not automatically uploaded to Turso.
+4. Redeploy the latest `main` commit **after changing settings or environment variables**.
+5. Open `https://your-project.vercel.app/api/health`. A configured deployment returns JSON with `status: "ok"`, `aiConfigured: true`, and `storage: "turso"`. Then upload the sample PDF and generate a study aid.
+
+Hosted uploads are capped at **4 MB**, leaving room for multipart fields under [Vercel's 4.5 MB function payload limit](https://vercel.com/docs/functions/limitations). Local uploads remain 10 MB. The function allows up to 300 seconds for the bounded AI loop; choose a hosting configuration that supports that duration. Progress and an expiring per-session lease are persisted in Turso so requests sent to different instances see the same task. If a function is terminated, its lease expires after 330 seconds and the session becomes retryable. Basic write rate limits and the four-run concurrency cap are still per instance.
+
+Troubleshooting:
+
+- **404/plain-text/HTML from `/api/health`:** the API was not deployed or routed. Check that Vercel's Root Directory is the repository root and that the latest `vercel.json` is included.
+- **`MISSING_DATABASE_CONFIG`:** add both Turso variables and redeploy.
+- **`DATABASE_UNAVAILABLE`:** check the Turso URL, token permissions/expiry, and database availability.
+- **`MISSING_API_KEY`:** add the key to Vercel environment variables and redeploy; a key configured on your laptop is not available to Vercel.
+- **413:** use a lecture file under 4 MB on Vercel.
+
+This remains a classroom app with no user authentication. Hosted sessions are shared by anyone who can access the deployment; use Vercel deployment protection for a private class demonstration.
+
 ## Environment variables
 
-The root `.env.example` is a template; configuration is loaded **only from `server/.env`**, regardless of the directory from which Node starts. An identical template is available at `server/.env.example`.
+The root `.env.example` is a template; local configuration is loaded from **`server/.env`**, regardless of the directory from which Node starts. Hosting environment variables take precedence. An identical template is available at `server/.env.example`.
 
 | Variable         | Default                 | Purpose                                                                                    |
 | ---------------- | ----------------------- | ------------------------------------------------------------------------------------------ |
@@ -130,7 +171,7 @@ This is a **bounded agentic workflow**, not multiple independent autonomous agen
 6. The observer validates the revision, and the critic reviews it again with no revision allowance.
 7. If it still fails, the endpoint returns `422 CRITIC_REJECTED`. An unverified answer is never saved as a successful study aid.
 
-A successful first pass costs two AI requests. A revision costs three requests if the critic supplies the corrected output, or four if regeneration is needed. Each provider request has a 60-second timeout and automatic SDK retries are disabled. A failure stops the task; the student may manually try again. Active runs are process-local and do not resume after a server restart.
+A successful first pass costs two AI requests. A revision costs three requests if the critic supplies the corrected output, or four if regeneration is needed. Each provider request has a 60-second timeout and automatic SDK retries are disabled. A failure stops the task; the student may manually try again. Local active runs are process-local. Vercel progress and leases are stored in Turso, but interrupted generation does not resume automatically.
 
 ### Gemini and future OpenRouter support
 
@@ -169,19 +210,22 @@ Student AI Agent/
 │   ├── vite.config.js
 │   └── package.json
 ├── server/
-│   ├── agents/{controller,planner,executor,observer,critic,memory}.js
+│   ├── agents/{controller,planner,executor,observer,critic,memory,tursoMemory}.js
 │   ├── tools/{fileTools,studyTools}.js
 │   ├── services/{aiProvider,geminiProvider,fileService,errors,rateLimit}.js
 │   ├── routes/studyRoutes.js
 │   ├── db/{database.js,schema.sql}
 │   ├── prompts/{systemPrompt,summaryPrompt,questionPrompt,mcqPrompt,revisionPrompt,criticPrompt,prompts,schemas}.js
-│   ├── tests/{app.test,gemini.test,rateLimit.test,fixtures}.js
+│   ├── tests/{app.test,gemini.test,rateLimit.test,vercel.test,fixtures}.js
 │   ├── uploads/.gitkeep
+│   ├── vercelApp.js
 │   ├── app.js
 │   ├── config.js
 │   ├── server.js
 │   ├── .env.example
 │   └── package.json
+├── api/index.js
+├── vercel.json
 ├── samples/lecture.{txt,pdf,docx}
 ├── scripts/{create-samples.py,verify-live.js}
 ├── e2e/{study.spec,test-server}.js
@@ -295,7 +339,7 @@ npm run test:e2e
 
 Backend tests cover real TXT/PDF/DOCX extraction, all four tasks, passing and failing critic reviews, the single-revision limit, malformed responses, missing API configuration, invalid and oversized uploads, session persistence, concurrency, and quiz scoring. Browser tests cover the full student workflow, saved-session restoration, mobile layout, downloads, and error recovery.
 
-Verification on October 11, 2026: **40 backend/provider tests passed, all 5 browser scenarios passed, and the production build passed.** Browser checks used an existing local Chromium installation. If you already have a compatible Chromium executable, you can set `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/absolute/path/to/chromium` when running `npm run test:e2e`; otherwise use the browser installation command above.
+Verification on October 11, 2026: **48 backend/provider tests passed, all 5 browser scenarios passed, and the production build passed.** The hosted database adapter was tested with the libSQL client against temporary local SQLite files, including separate client instances, shared progress, and expiring task leases. A live Turso connection and Vercel end-to-end deployment still require account configuration. Browser checks used an existing local Chromium installation. If you already have a compatible Chromium executable, you can set `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/absolute/path/to/chromium` when running `npm run test:e2e`; otherwise use the browser installation command above.
 
 The test server uses deterministic fixture responses and an in-memory database. It is separate from `server/server.js` and cannot be enabled through the application UI. These tests verify integration and workflow behavior, **not real Gemini content quality or live model access**. To verify those, put your own key in `server/.env` and run the sample workflow or `npm run test:live`. That opt-in script uploads the sample PDF through a temporary local API server, calls real Gemini for all four tasks and critic reviews, checks saved outputs, and closes its isolated in-memory database. It consumes API quota and exits with a clear failure if a task cannot pass review. No key is included in this project.
 
@@ -304,12 +348,12 @@ Regenerate the sample PDF/DOCX, if desired, with `python3 scripts/create-samples
 ## Limits and future improvements
 
 - Local, unauthenticated assignment app. Anyone with access to the backend can access sessions. It defaults to loopback; add authentication, authorization, quotas, and production hardening before public deployment.
-- Maximum upload: 10 MB, 100 PDF pages, 60,000 extracted characters. Oversized lectures are rejected rather than silently truncated. DOCX archives are checked for expansion size and entry count.
+- Maximum upload: 10 MB locally or 4 MB on Vercel, 100 PDF pages, 60,000 extracted characters. Oversized lectures are rejected rather than silently truncated. DOCX archives are checked for expansion size and entry count.
 - Text-based PDF only: no OCR for scanned pages, handwriting, images, or equations. Password-protected or damaged files may not extract. PDF/DOCX layout and tables may lose structure.
 - AI can still make mistakes, including in the critic. It may omit topics or struggle to produce ten distinct MCQs from very short notes. Prompt injection protections reduce risk but cannot guarantee factual grounding.
 - No live AI validation is possible without a configured Gemini key and quota. Billing and model access are controlled by the Gemini account.
 - Quiz answers are part of the saved output/API response and PDF export. The quiz is a self-study aid, not a secure examination system.
-- Four simultaneous generations per server process, one per session. Progress traces are held in memory; accepted output metadata is saved. No background job queue or restart recovery.
+- Four simultaneous generations per server process, one per session. Local progress traces are held in memory; Vercel traces use Turso. Accepted output metadata is saved in either mode. No background job queue or restart recovery.
 - The picker shows the 50 latest sessions; older sessions remain accessible by ID through the API. There is no search, deletion, or weak-topic tracking yet.
 - No OpenRouter adapter yet, no vector retrieval, and no multi-file lecture collection.
 - Future improvements: source citations, OCR, lecture chunking, searchable session history and deletion, weak-topic tracking, a selectable fallback provider, learning progress charts, and authentication for multi-user deployment.

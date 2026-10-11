@@ -14,7 +14,7 @@ export default function SessionHistory({ activeId, busy, onSelect }) {
   return (
     <section className="panel session-history" aria-label="Previous study sessions">
       <h3>Previous study sessions</h3>
-      <p className="muted small">Reopen a lecture and its saved study aids on this computer.</p>
+      <p className="muted small">Reopen a lecture and its saved study aids.</p>
       {error && <p role="alert" className="field-error">{error}</p>}
       <label htmlFor="previous-session">Saved lectures</label>
       <select id="previous-session" disabled={busy || !sessions.length} value={activeId || ""}

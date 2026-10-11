@@ -11,8 +11,12 @@ async function request(path, options = {}) {
   try {
     data = await response.json();
   } catch {
+    if (response.status === 413)
+      throw new Error("This file exceeds the hosting upload limit. Try a file under 4 MB.");
+    if (response.status === 504)
+      throw new Error("The hosting server timed out. Please try generating again.");
     throw new Error(
-      "The server returned an unreadable response. Check that the backend is running.",
+      `The API returned a non-JSON response (HTTP ${response.status}). Check that the deployment includes the backend and routes /api requests to it.`,
     );
   }
   if (!response.ok)

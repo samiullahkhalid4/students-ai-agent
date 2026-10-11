@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { Upload, FileText, ArrowUpRight, Check, X } from "lucide-react";
 
-export default function FileUpload({ onUpload, busy, session, onReset }) {
+export default function FileUpload({ onUpload, busy, session, onReset, maxFileBytes = 10 * 1024 * 1024 }) {
+  const maxMegabytes = maxFileBytes / 1024 / 1024;
   const [file, setFile] = useState(null);
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
@@ -16,9 +17,9 @@ export default function FileUpload({ onUpload, busy, session, onReset }) {
       setError("Choose a PDF, TXT, or DOCX file.");
       return;
     }
-    if (selected.size > 10 * 1024 * 1024) {
+    if (selected.size > maxFileBytes) {
       setFile(null);
-      setError("Please choose a file smaller than 10 MB.");
+      setError(`Please choose a file no larger than ${maxMegabytes} MB.`);
       return;
     }
     setFile(selected);
@@ -27,6 +28,10 @@ export default function FileUpload({ onUpload, busy, session, onReset }) {
     event.preventDefault();
     if (!file) {
       setError("Choose your lecture file first.");
+      return;
+    }
+    if (file.size > maxFileBytes) {
+      setError(`Please choose a file no larger than ${maxMegabytes} MB.`);
       return;
     }
     setError("");
@@ -134,7 +139,7 @@ export default function FileUpload({ onUpload, busy, session, onReset }) {
                   ? `${(file.size / 1024).toFixed(1)} KB · Click to replace`
                   : "or click to browse files"}
               </span>
-              <small>PDF, TXT, DOCX · Up to 10 MB</small>
+              <small>PDF, TXT, DOCX · Up to {maxMegabytes} MB</small>
             </div>
             {file && (
               <button
@@ -164,7 +169,7 @@ export default function FileUpload({ onUpload, busy, session, onReset }) {
         </form>
       )}
       <p className="privacy-note">
-        Files are read as text. Your lecture is saved locally and sent to Gemini
+        Files are read as text. Your lecture is stored with this app and sent to Gemini
         when you generate a study aid.
       </p>
     </section>

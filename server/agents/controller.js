@@ -7,8 +7,12 @@ import { AppError } from "../services/errors.js";
 export function createAgentController({ memory, provider }) {
   const states = new Map();
   const activeSessions = new Set();
-  function getStatus(sessionId) {
-    memory.getStudySession(sessionId);
+  async function getStatus(sessionId) {
+    await memory.getStudySession(sessionId);
+    if (memory.getTaskState) {
+      const saved = await memory.getTaskState(sessionId);
+      if (saved) return saved;
+    }
     return (
       states.get(sessionId) || {
         status: "idle",
@@ -33,7 +37,6 @@ export function createAgentController({ memory, provider }) {
         "The agent is busy. Please try again shortly.",
         "AGENT_BUSY",
       );
-    const session = memory.getStudySession(sessionId);
     // Only recent status traces are held in memory; completed results live in SQLite.
     for (const [id, state] of states) {
       if (states.size < 100) break;
@@ -47,24 +50,28 @@ export function createAgentController({ memory, provider }) {
       trace: [],
       revisionCount: 0,
     };
-    const step = (stage, message) => {
+    let leaseToken;
+    const step = async (stage, message) => {
       state.stage = stage;
       state.trace.push({ stage, message, at: new Date().toISOString() });
+      if (leaseToken) await memory.saveTaskState(sessionId, leaseToken, state);
     };
     states.set(sessionId, state);
     activeSessions.add(sessionId);
     try {
-      step("Controller", "Accepted your study goal.");
-      step("Planner", "Prepared a plan for this task.");
-      step("Memory + Tools", "Loaded extracted lecture text from SQLite.");
+      const session = await memory.getStudySession(sessionId);
+      if (memory.acquireTask) leaseToken = await memory.acquireTask(sessionId, state);
+      await step("Controller", "Accepted your study goal.");
+      await step("Planner", "Prepared a plan for this task.");
+      await step("Memory + Tools", "Loaded extracted lecture text from SQLite.");
       observeLecture(session.lecture_text);
-      step("Executor", "Generating a study aid from your lecture.");
+      await step("Executor", "Generating a study aid from your lecture.");
       let output = observeOutput(
         task,
         await executeTask(provider, task, session),
       );
-      step("Observer", "Output is present and matches the expected structure.");
-      step("Critic", "Checking clarity, coverage, and lecture grounding.");
+      await step("Observer", "Output is present and matches the expected structure.");
+      await step("Critic", "Checking clarity, coverage, and lecture grounding.");
       let review = await critiqueOutput(
         provider,
         task,
@@ -75,7 +82,7 @@ export function createAgentController({ memory, provider }) {
       const firstIssues = review.issues;
       if (!review.passed) {
         state.revisionCount = 1;
-        step("Revise", `One revision requested: ${review.issues.join(" ")}`);
+        await step("Revise", `One revision requested: ${review.issues.join(" ")}`);
         const revised =
           review.revisedOutput === null
             ? await executeTask(provider, task, session, {
@@ -84,8 +91,8 @@ export function createAgentController({ memory, provider }) {
               })
             : JSON.stringify(review.revisedOutput);
         output = observeOutput(task, revised);
-        step("Observer", "Revised output matches the expected structure.");
-        step("Critic", "Checking the revised result against the lecture.");
+        await step("Observer", "Revised output matches the expected structure.");
+        await step("Critic", "Checking the revised result against the lecture.");
         review = await critiqueOutput(
           provider,
           task,
@@ -100,8 +107,8 @@ export function createAgentController({ memory, provider }) {
             "CRITIC_REJECTED",
           );
       }
-      step("Pass", "Critic accepted the result. Saving to SQLite.");
-      const saved = memory.saveGeneratedOutput(sessionId, task, output, {
+      await step("Pass", "Critic accepted the result. Saving to SQLite.");
+      const saved = await memory.saveGeneratedOutput(sessionId, task, output, {
         provider: provider.name,
         model: provider.model,
         revisionCount: state.revisionCount,
@@ -109,20 +116,24 @@ export function createAgentController({ memory, provider }) {
         plan,
         trace: [...state.trace],
       });
-      step("Complete", "Your study aid is ready and saved.");
+      await step("Complete", "Your study aid is ready and saved.");
       state.status = "complete";
       return { result: saved, state };
     } catch (error) {
       state.status = "error";
-      step(
+      try { await step(
         "Error",
         error instanceof AppError
           ? error.message
           : "Unable to complete the task. Please try again.",
-      );
+      ); } catch { /* Keep the original error if progress persistence also fails. */ }
       throw error;
     } finally {
       activeSessions.delete(sessionId);
+      if (leaseToken) {
+        try { await memory.saveTaskState(sessionId, leaseToken, state, true); }
+        catch { /* A crashed or disconnected run becomes retryable when its lease expires. */ }
+      }
     }
   }
   return { generate, getStatus };

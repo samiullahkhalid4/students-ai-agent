@@ -227,9 +227,9 @@ export default function Home() {
           <div className="notice">
             <AlertCircle size={18} />
             <p>
-              <strong>One-time setup:</strong> Add your Gemini API key to{" "}
-              <code>server/.env</code> and restart the backend to generate study
-              aids. You can upload a lecture now.
+              <strong>One-time setup:</strong> Configure the backend Gemini API key
+              in your hosting environment, or in <code>server/.env</code> locally,
+              then restart or redeploy to generate study aids.
             </p>
           </div>
         )}
@@ -255,6 +255,7 @@ export default function Home() {
         <div className="study-layout">
           <aside>
             <FileUpload
+              maxFileBytes={health?.maxFileBytes}
               key={uploadKey}
               onUpload={upload}
               busy={busy}
