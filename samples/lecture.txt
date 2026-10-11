@@ -1,0 +1,19 @@
+Introduction to Intelligent Agents
+
+An intelligent agent perceives its environment through sensors and acts on that environment through actuators. A rational agent selects the action expected to maximize its performance measure, given the percept sequence and available knowledge. Rationality is not the same as omniscience: an agent cannot know the actual outcome of every action in advance.
+
+The PEAS framework describes a task environment using Performance measure, Environment, Actuators, and Sensors. For a robot vacuum, a performance measure can include cleanliness and energy use. Its environment is the room. Wheels and suction are actuators, while dirt and distance detectors are sensors.
+
+An environment is fully observable if sensors provide all information relevant to choosing an action. In a partially observable environment, the agent has incomplete information. An environment is deterministic if the next state is completely determined by the current state and the action taken. In a stochastic environment, outcomes involve uncertainty.
+
+A simple reflex agent selects actions using condition-action rules based on the current percept. It does not retain percept history. A model-based reflex agent maintains internal state to track aspects of the environment that are not immediately observable. This internal state is updated using percepts and a model of how the world changes.
+
+A goal-based agent chooses actions that move it toward a desired goal. It may use search and planning to consider future action sequences. A utility-based agent evaluates how desirable different outcomes are using a utility function. This helps compare alternatives that achieve a goal but differ in quality.
+
+A learning agent improves with experience. Its learning element improves the performance element. A critic provides feedback on how well the agent is doing relative to a performance standard. A problem generator suggests exploratory actions that may produce new and informative experiences.
+
+In a study assistant, lecture files form part of the environment. A controller coordinates the workflow. A planner breaks a student goal into steps. An executor performs the steps by calling tools. An observer checks whether a result is present and well-formed. A critic evaluates the result against lecture content. Memory stores session data and previous outputs.
+
+A bounded revision loop limits the number of corrections. For this example, the assistant can revise an output at most once. A second review decides whether the corrected result is acceptable. This avoids indefinite retries, limits cost, and makes behavior easier to explain.
+
+Grounding means basing an answer on the provided source material. Unsupported facts should be removed. A second AI review can help identify mistakes, but it does not guarantee that an answer is correct. Students should check important details against their original lecture.

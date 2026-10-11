@@ -1,0 +1,94 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 3311 >>
+stream
+BT /F1 10 Tf 45 750 Td 14 TL
+(Introduction to Intelligent Agents) Tj T*
+() Tj T*
+(An intelligent agent perceives its environment through sensors and acts on that) Tj T*
+(environment through actuators. A rational agent selects the action expected to maximize) Tj T*
+(its performance measure, given the percept sequence and available knowledge. Rationality) Tj T*
+(is not the same as omniscience: an agent cannot know the actual outcome of every action) Tj T*
+(in advance.) Tj T*
+() Tj T*
+(The PEAS framework describes a task environment using Performance measure, Environment,) Tj T*
+(Actuators, and Sensors. For a robot vacuum, a performance measure can include) Tj T*
+(cleanliness and energy use. Its environment is the room. Wheels and suction are) Tj T*
+(actuators, while dirt and distance detectors are sensors.) Tj T*
+() Tj T*
+(An environment is fully observable if sensors provide all information relevant to) Tj T*
+(choosing an action. In a partially observable environment, the agent has incomplete) Tj T*
+(information. An environment is deterministic if the next state is completely determined) Tj T*
+(by the current state and the action taken. In a stochastic environment, outcomes involve) Tj T*
+(uncertainty.) Tj T*
+() Tj T*
+(A simple reflex agent selects actions using condition-action rules based on the current) Tj T*
+(percept. It does not retain percept history. A model-based reflex agent maintains) Tj T*
+(internal state to track aspects of the environment that are not immediately observable.) Tj T*
+(This internal state is updated using percepts and a model of how the world changes.) Tj T*
+() Tj T*
+(A goal-based agent chooses actions that move it toward a desired goal. It may use search) Tj T*
+(and planning to consider future action sequences. A utility-based agent evaluates how) Tj T*
+(desirable different outcomes are using a utility function. This helps compare) Tj T*
+(alternatives that achieve a goal but differ in quality.) Tj T*
+() Tj T*
+(A learning agent improves with experience. Its learning element improves the performance) Tj T*
+(element. A critic provides feedback on how well the agent is doing relative to a) Tj T*
+(performance standard. A problem generator suggests exploratory actions that may produce) Tj T*
+(new and informative experiences.) Tj T*
+() Tj T*
+(In a study assistant, lecture files form part of the environment. A controller) Tj T*
+(coordinates the workflow. A planner breaks a student goal into steps. An executor) Tj T*
+(performs the steps by calling tools. An observer checks whether a result is present and) Tj T*
+(well-formed. A critic evaluates the result against lecture content. Memory stores) Tj T*
+(session data and previous outputs.) Tj T*
+() Tj T*
+(A bounded revision loop limits the number of corrections. For this example, the) Tj T*
+(assistant can revise an output at most once. A second review decides whether the) Tj T*
+(corrected result is acceptable. This avoids indefinite retries, limits cost, and makes) Tj T*
+(behavior easier to explain.) Tj T*
+() Tj T*
+(Grounding means basing an answer on the provided source material. Unsupported facts) Tj T*
+(should be removed. A second AI review can help identify mistakes, but it does not) Tj T*
+(guarantee that an answer is correct. Students should check important details against) Tj T*
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 63 >>
+stream
+BT /F1 10 Tf 45 750 Td 14 TL
+(their original lecture.) Tj T*
+ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000191 00000 n 
+0000000317 00000 n 
+0000003680 00000 n 
+0000003806 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+3919
+%%EOF

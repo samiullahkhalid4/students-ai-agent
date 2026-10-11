@@ -1,0 +1,11 @@
+node_modules/
+client/dist/
+.env
+.env.*
+!.env.example
+server/db/*.sqlite*
+server/uploads/*
+!server/uploads/.gitkeep
+playwright-report/
+test-results/
+.DS_Store

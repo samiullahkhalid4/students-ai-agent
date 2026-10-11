@@ -1,0 +1,1 @@
+export const summaryPrompt = "Create a short, clear summary for a university student. Include overview, importantConcepts with explanations, keyDefinitions, and keyPointsToRemember. Do not invent definitions if none are in the lecture.";

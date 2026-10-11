@@ -1,0 +1,1 @@
+export const revisionPrompt = "Create a realistic short revision plan using only lecture topics. For each topic include importance (High, Medium, or Low), estimatedMinutes (5\u201360), and what to focus on. Order topics into a useful study sequence. Importance and study times are study recommendations, not claims about exam marks. Use at most 8 topics.";

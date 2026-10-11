@@ -1,0 +1,1 @@
+export const mcqPrompt = "Generate exactly 10 distinct MCQs. Each must include a question, options A/B/C/D, one correctAnswer letter, and a one-line explanation supported by the lecture. Options must be distinct; exactly one answer must be correct. Spread coverage across important concepts.";
