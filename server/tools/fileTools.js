@@ -1,4 +1,3 @@
-import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 import yauzl from "yauzl";
 import { AppError } from "../services/errors.js";
@@ -6,7 +5,12 @@ import { AppError } from "../services/errors.js";
 export async function extractPdfText(buffer) {
   if (buffer.subarray(0, 5).toString() !== "%PDF-")
     throw new AppError(400, "This file is not a valid PDF.");
-  const parser = new PDFParse({ data: new Uint8Array(buffer) });
+  // Load canvas before PDF.js so its DOM polyfills and native bindings are
+  // included by serverless tracing. Keep PDF initialization out of API startup.
+  const { CanvasFactory, getPath } = await import("pdf-parse/worker");
+  const { PDFParse } = await import("pdf-parse");
+  PDFParse.setWorker(getPath());
+  const parser = new PDFParse({ data: new Uint8Array(buffer), CanvasFactory });
   try {
     const info = await parser.getInfo();
     if (info.total > 100)

@@ -92,6 +92,7 @@ Hosted uploads are capped at **4 MB**, leaving room for multipart fields under [
 
 Troubleshooting:
 
+- **500 / `FUNCTION_INVOCATION_FAILED` with `DOMMatrix is not defined`:** deploy the latest code and keep the PDF worker/canvas entries in `vercel.json`'s `includeFiles`. PDF.js loads native canvas indirectly, so automatic function tracing alone can omit it. The PDF reader is loaded only during PDF uploads, with `pdf-parse/worker` initialized before `pdf-parse`.
 - **404/plain-text/HTML from `/api/health`:** the API was not deployed or routed. Check that Vercel's Root Directory is the repository root and that the latest `vercel.json` is included.
 - **`MISSING_DATABASE_CONFIG`:** add both Turso variables and redeploy.
 - **`DATABASE_UNAVAILABLE`:** check the Turso URL, token permissions/expiry, and database availability.

@@ -7,7 +7,7 @@
   "functions": {
     "api/index.js": {
       "maxDuration": 300,
-      "includeFiles": "{server/db/schema.sql,node_modules/pdf-parse/dist/**}"
+      "includeFiles": "{server/db/schema.sql,node_modules/pdf-parse/dist/**,node_modules/@napi-rs/canvas*/**,node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs}"
     }
   },
   "rewrites": [
