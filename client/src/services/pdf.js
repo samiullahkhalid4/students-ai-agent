@@ -86,7 +86,7 @@ function documentDefinition(result, session) {
       { text: title, fontSize: 24, bold: true, margin: [0, 0, 0, 14] },
       paragraph(`Student: ${session.student_name}`),
       paragraph(`Subject: ${session.subject}`),
-      paragraph(`Lecture: ${session.filename}`),
+      paragraph(`Notes used: ${(result.metadata.sources || [{ filename: session.filename }]).map((source) => source.filename).join(", ")}`),
       ...studyContent(result.task_type, result.output),
       { text: "AI review helps catch errors, but is not a guarantee. Check important details against your lecture.",
         fontSize: 9, color: "#66756d", margin: [0, 20, 0, 0] },

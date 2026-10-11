@@ -3,6 +3,7 @@ import { executeTask } from "./executor.js";
 import { observeOutput, observeLecture } from "./observer.js";
 import { critiqueOutput } from "./critic.js";
 import { AppError } from "../services/errors.js";
+import { selectSources } from "./studySources.js";
 
 export function createAgentController({ memory, provider }) {
   const states = new Map();
@@ -23,7 +24,7 @@ export function createAgentController({ memory, provider }) {
       }
     );
   }
-  async function generate(sessionId, task) {
+  async function generate(sessionId, task, fileIds) {
     const plan = planTask(task);
     if (activeSessions.has(sessionId))
       throw new AppError(
@@ -59,7 +60,8 @@ export function createAgentController({ memory, provider }) {
     states.set(sessionId, state);
     activeSessions.add(sessionId);
     try {
-      const session = await memory.getStudySession(sessionId);
+      const snapshot = await memory.getStudySession(sessionId);
+      const session = selectSources(snapshot, fileIds);
       if (memory.acquireTask) leaseToken = await memory.acquireTask(sessionId, state);
       await step("Controller", "Accepted your study goal.");
       await step("Planner", "Prepared a plan for this task.");
@@ -111,6 +113,8 @@ export function createAgentController({ memory, provider }) {
       const saved = await memory.saveGeneratedOutput(sessionId, task, output, {
         provider: provider.name,
         model: provider.model,
+        sources: session.sources,
+        availableFileIds: snapshot.files.map((file) => file.id),
         revisionCount: state.revisionCount,
         critic: { passed: true, issues: [], initialIssues: firstIssues },
         plan,

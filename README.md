@@ -1,6 +1,6 @@
 # Smart Study Agent for Exam Preparation
 
-A small MS Computer Science classroom project: upload a lecture and generate a short summary, important questions, 10 interactive MCQs, or a revision plan. A visible, bounded agent workflow plans the task, executes it, validates the structure, and asks a second AI call to check the answer against the original lecture.
+A small MS Computer Science classroom project: organize multiple lecture files in one subject and generate a short summary, important questions, 10 interactive MCQs, or a revision plan. A visible, bounded agent workflow plans the task, executes it, validates the structure, and asks a second AI call to check the answer against the original lecture.
 
 ## Problem and solution
 
@@ -8,7 +8,9 @@ Students often have lecture notes but need help turning them into useful exam-pr
 
 ## Features
 
-- Student name, subject, and PDF, UTF-8 TXT, or DOCX upload.
+- One study space per subject, with multiple PDF, UTF-8 TXT, or DOCX files. Select several files at once and add more lectures later.
+- Study all notes or selected files; saved results and PDFs record the exact source filenames.
+- Larger text, a guided three-step flow, simpler progress messages, and quizzes with Back/Next navigation and incorrect-answer review.
 - Summary with overview, important concepts, key definitions, and key points to remember.
 - Five short questions and five conceptual questions.
 - Ten MCQs with four options, correct answers, and explanations revealed after submission.
@@ -16,11 +18,23 @@ Students often have lecture notes but need help turning them into useful exam-pr
 - Live agent progress, expandable task plan and execution trace.
 - Strict JSON validation, a critic review, and **at most one revision** followed by another review.
 - SQLite persistence for students, lectures, outputs, reviews, and quiz scores.
-- Last-session restoration, a picker for the 50 most recent sessions, saved output tabs, and PDF downloads.
+- Last-subject restoration, a picker for the 50 most recent study spaces, saved output tabs and versions, and PDF downloads.
 - Explicit insufficient-information responses for lectures too thin to support the task.
 - Basic write rate limiting (60 requests/minute per local server process).
 - PDF downloads include lecture details, headings, page numbers, and a separate MCQ answer key. PDFs are generated locally in the browser without another AI request.
 - Responsive React interface; no heavy UI or agent framework.
+
+## Studying with multiple files
+
+1. Enter your name and subject, select one or more lecture files, and click **Upload my notes**.
+2. Reopen the subject from **My subjects → Saved subjects** whenever you want to continue. Use **Add more notes** to upload later lectures into that same study space.
+3. Leave **Study all notes** checked, or expand **Select specific files** to choose the material for an activity.
+4. Choose **Short summary**, **Practice questions**, **Take a practice quiz**, or **Revision plan**. Each result lists its source files and offers **Download PDF**.
+5. Adding notes keeps existing results and quiz scores. Older results display a notice when new files were added afterward. Generate the activity again to include them, and use **Saved versions** to revisit earlier results.
+
+A subject can hold up to **50 files**. Each file supports up to **60,000 extracted characters** (PDFs also have a 100-page limit). One activity can use up to **60,000 combined characters**, including source labels. For a larger subject, select fewer files per activity; content is never silently truncated. Retrying an append with the same filename and extracted text does not duplicate the file.
+
+Existing single-file sessions migrate automatically on startup in both local SQLite and Turso. Their session IDs, generated outputs, and quiz scores are preserved. Old separate sessions remain separate; they are not automatically merged by subject name.
 
 ## Stack and requirements
 
@@ -88,7 +102,7 @@ Vercel cannot persist a writable local SQLite file across function instances. Th
 4. Redeploy the latest `main` commit **after changing settings or environment variables**.
 5. Open `https://your-project.vercel.app/api/health`. A configured deployment returns JSON with `status: "ok"`, `aiConfigured: true`, and `storage: "turso"`. Then upload the sample PDF and generate a study aid.
 
-Hosted uploads are capped at **4 MB**, leaving room for multipart fields under [Vercel's 4.5 MB function payload limit](https://vercel.com/docs/functions/limitations). Local uploads remain 10 MB. The function allows up to 300 seconds for the bounded AI loop; choose a hosting configuration that supports that duration. Progress and an expiring per-session lease are persisted in Turso so requests sent to different instances see the same task. If a function is terminated, its lease expires after 330 seconds and the session becomes retryable. Basic write rate limits and the four-run concurrency cap are still per instance.
+Each hosted file upload is capped at **4 MB**, leaving room for multipart fields under [Vercel's 4.5 MB function payload limit](https://vercel.com/docs/functions/limitations). Local uploads remain 10 MB per file. Multi-file selections upload sequentially, keeping each request within the limit. If a file fails, completed uploads stay saved and the remaining files can be retried in the same subject. The function allows up to 300 seconds for the bounded AI loop; choose a hosting configuration that supports that duration. Progress and an expiring per-session lease are persisted in Turso so requests sent to different instances see the same task. If a function is terminated, its lease expires after 330 seconds and the session becomes retryable. Basic write rate limits and the four-run concurrency cap are still per instance.
 
 Troubleshooting:
 
@@ -248,8 +262,9 @@ All error responses have `{ "error": "Useful message", "code": "ERROR_CODE" }`.
 | ------ | ------------------------------- | --------------------------------------------------------------------------- |
 | GET    | `/api/health`                   | Backend availability and AI configuration status, never the API key.        |
 | POST   | `/api/study/upload`             | Multipart fields `name`, `subject`, and one `file`; returns `{ session }`.  |
-| POST   | `/api/study/generate`           | JSON `{ sessionId, task }`; returns `{ result, state }`.                    |
-| GET    | `/api/study/session/:id`        | Returns `{ session }` including lecture text, outputs, and quiz results.    |
+| POST   | `/api/study/generate`           | JSON `{ sessionId, task, fileIds? }`; omitted `fileIds` uses all subject files. Returns `{ result, state }`. |
+| POST   | `/api/study/session/:id/files`   | Multipart `file`; adds a file to the existing subject, returns `{ session }`. |
+| GET    | `/api/study/session/:id`        | Returns `{ session }` including file metadata, original lecture text, outputs, and quiz results.    |
 | GET    | `/api/study/sessions`           | Lists the 50 most recent sessions without lecture bodies.                   |
 | GET    | `/api/study/session/:id/history` | Returns saved outputs and quiz scores.                                      |
 | GET    | `/api/study/session/:id/status` | Polls current task state and trace.                                         |
@@ -273,10 +288,11 @@ Use the actual session ID returned from upload. For quiz submission, `answers` i
 
 - `students`: id, name.
 - `study_sessions`: id, student_id, subject, filename, lecture_text, created_at.
-- `generated_outputs`: id, session_id, task_type, output (JSON), metadata (JSON: critic review, trace, plan, revision count, provider/model), created_at.
+- `lecture_files`: id, session_id, filename, lecture_text, created_at. These rows supply the selected notes for generation; the original session fields remain for compatibility.
+- `generated_outputs`: id, session_id, task_type, output (JSON), metadata (JSON: source IDs/names, available file IDs at generation time, critic review, trace, plan, revision count, provider/model), created_at.
 - `quiz_results`: id, session_id, output_id, score, total, created_at.
 
-Foreign keys and score constraints are enabled. Queries use prepared statements. Dates are stored as UTC ISO strings. Each upload creates a student row and a session transactionally; names are not unique identities. The browser remembers only the active session ID, not API keys or lecture text. The session picker retrieves recent session metadata from SQLite. Starting a new session clears that browser pointer but does not delete earlier SQLite records.
+Foreign keys and score constraints are enabled. Queries use prepared statements. Dates are stored as UTC ISO strings. Creating a subject saves a student, session, and first file transactionally; later uploads add only a file row; names are not unique identities. The browser remembers only the active session ID, not API keys or lecture text. The session picker retrieves recent session metadata from SQLite. Creating another subject clears that browser pointer but does not delete earlier SQLite records.
 
 ## Agent type classification
 

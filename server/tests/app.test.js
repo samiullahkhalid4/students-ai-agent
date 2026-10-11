@@ -375,7 +375,7 @@ test("lists previous sessions and retrieves their output history", async (t) => 
 test("missing lecture text stops before any paid AI request", async (t) => {
   const { app, db, provider } = setup(t);
   const { body } = await upload(app);
-  db.prepare("UPDATE study_sessions SET lecture_text = '' WHERE id = ?").run(body.session.id);
+  db.prepare("UPDATE lecture_files SET lecture_text = '' WHERE session_id = ?").run(body.session.id);
   const response = await request(app).post("/api/study/generate")
     .send({ sessionId: body.session.id, task: "summary" }).expect(422);
   assert.equal(response.body.code, "MISSING_LECTURE");

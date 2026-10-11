@@ -5,25 +5,25 @@ const actions = [
   {
     task: "summary",
     icon: FileText,
-    text: "The big ideas, made simple.",
+    text: "Review the main ideas and key definitions.",
     color: "green",
   },
   {
     task: "questions",
     icon: CircleHelp,
-    text: "Know what to prepare for.",
+    text: "Practice 10 written questions from your notes.",
     color: "orange",
   },
   {
     task: "mcqs",
     icon: ListChecks,
-    text: "Put your knowledge to the test.",
+    text: "Check your understanding with 10 questions.",
     color: "blue",
   },
   {
     task: "revision",
     icon: CalendarDays,
-    text: "Give your study time a plan.",
+    text: "See what to revise first and how long to spend.",
     color: "purple",
   },
 ];
@@ -33,14 +33,14 @@ export default function ActionButtons({ session, busy, generating, activeTask, g
               <div className="task-header">
                 <div>
                   <div className="section-label">
-                    <span className="step-number">02</span> MAKE IT CLICK
+                    <span className="step-number">2</span> CHOOSE AN ACTIVITY
                   </div>
                   <h2 id="task-heading">How would you like to study?</h2>
                 </div>
                 <span className="task-hint">
                   {session
                     ? "Choose your next step"
-                    : "Upload a lecture to begin"}
+                    : "Upload your notes to begin"}
                 </span>
               </div>
               <div className="task-grid">
@@ -59,6 +59,7 @@ export default function ActionButtons({ session, busy, generating, activeTask, g
                       </span>
                       <ArrowUpRight size={16} className="task-arrow" />
                     </div>
+                    {task === "summary" && <span className="start-here">Start here</span>}
                     <strong>
                       {generating && activeTask === task
                         ? "Working on it…"

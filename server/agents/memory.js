@@ -1,4 +1,5 @@
 import { AppError } from "../services/errors.js";
+import { migrateSources, MAX_SUBJECT_FILES } from "./studySources.js";
 
 const decodeOutput = (row) => ({
   ...row,
@@ -7,9 +8,12 @@ const decodeOutput = (row) => ({
 });
 
 export function createMemory(db) {
+  db.exec(migrateSources);
   function listStudySessions() {
     return db.prepare(`SELECT s.id, s.subject, s.filename, s.created_at,
-      st.name AS student_name FROM study_sessions s
+      st.name AS student_name,
+      (SELECT count(*) FROM lecture_files f WHERE f.session_id = s.id) AS file_count
+      FROM study_sessions s
       JOIN students st ON st.id = s.student_id ORDER BY s.id DESC LIMIT 50`).all();
   }
   function saveStudySession({ name, subject, filename, lectureText }) {
@@ -26,6 +30,8 @@ export function createMemory(db) {
         )
         .run(student.lastInsertRowid, subject, filename, lectureText);
       sessionId = Number(session.lastInsertRowid);
+      db.prepare("INSERT INTO lecture_files (session_id, filename, lecture_text) VALUES (?, ?, ?)")
+        .run(sessionId, filename, lectureText);
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
@@ -57,7 +63,23 @@ export function createMemory(db) {
         "SELECT * FROM quiz_results WHERE session_id = ? ORDER BY id DESC",
       )
       .all(id);
-    return { ...session, outputs, quizResults };
+    const files = db.prepare("SELECT * FROM lecture_files WHERE session_id = ? ORDER BY id").all(id);
+    return { ...session, files, outputs, quizResults };
+  }
+  function addStudyFile(sessionId, { filename, lectureText }) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const session = getStudySession(sessionId);
+      const duplicate = session.files.some((file) => file.filename === filename && file.lecture_text === lectureText);
+      if (!duplicate) {
+        if (session.files.length >= MAX_SUBJECT_FILES)
+          throw new AppError(400, "This subject has 50 files. Use the existing notes to study.", "FILE_LIMIT");
+        db.prepare("INSERT INTO lecture_files (session_id, filename, lecture_text) VALUES (?, ?, ?)")
+          .run(sessionId, filename, lectureText);
+      }
+      db.exec("COMMIT");
+    } catch (error) { db.exec("ROLLBACK"); throw error; }
+    return getStudySession(sessionId);
   }
   function saveGeneratedOutput(sessionId, task, output, metadata) {
     const saved = db
@@ -100,5 +122,5 @@ export function createMemory(db) {
       .prepare("SELECT * FROM quiz_results WHERE id = ?")
       .get(saved.lastInsertRowid);
   }
-  return { saveStudySession, getStudySession, listStudySessions, saveGeneratedOutput, saveQuizResult };
+  return { saveStudySession, addStudyFile, getStudySession, listStudySessions, saveGeneratedOutput, saveQuizResult };
 }

@@ -15,7 +15,7 @@ const uploadFields = z.object({
   name: z.string().trim().min(1).max(100),
   subject: z.string().trim().min(1).max(160),
 });
-const generateFields = z.object({ sessionId: id, task: z.enum(TASKS) });
+const generateFields = z.object({ sessionId: id, task: z.enum(TASKS), fileIds: z.array(id).min(1).max(50).optional() });
 const quizFields = z.object({
   sessionId: id,
   outputId: id,
@@ -35,6 +35,9 @@ function validate(schema, data) {
 }
 const parseId = (value) =>
   validate(id, /^\d+$/.test(value) ? Number(value) : NaN);
+// File lists need names and sizes, not every document body on every browser refresh.
+const publicSession = (session) => ({ ...session, files: session.files.map(({ lecture_text, ...file }) =>
+  ({ ...file, character_count: lecture_text.length })) });
 
 export function createStudyRoutes({ memory, controller }) {
   const router = Router();
@@ -72,11 +75,21 @@ export function createStudyRoutes({ memory, controller }) {
       filename: sanitizeFilename(req.file.originalname),
       lectureText,
     });
-    res.status(201).json({ session });
+    res.status(201).json({ session: publicSession(session) });
   });
   router.post("/generate", async (req, res) => {
-    const { sessionId, task } = validate(generateFields, req.body);
-    res.json(await controller.generate(sessionId, task));
+    const { sessionId, task, fileIds } = validate(generateFields, req.body);
+    res.json(await controller.generate(sessionId, task, fileIds));
+  });
+  router.post("/session/:id/files", upload.single("file"), async (req, res) => {
+    const sessionId = parseId(req.params.id);
+    await memory.getStudySession(sessionId);
+    if (!req.file) throw new AppError(400, "Choose notes to add to this subject.", "MISSING_FILE");
+    const lectureText = await extractLecture(req.file);
+    const session = await memory.addStudyFile(sessionId, {
+      filename: sanitizeFilename(req.file.originalname), lectureText,
+    });
+    res.status(201).json({ session: publicSession(session) });
   });
   router.get("/session/:id/status", async (req, res) =>
     res.json(await controller.getStatus(parseId(req.params.id))),
@@ -89,7 +102,7 @@ export function createStudyRoutes({ memory, controller }) {
     res.json({ outputs: session.outputs, quizResults: session.quizResults });
   });
   router.get("/session/:id", async (req, res) =>
-    res.json({ session: await memory.getStudySession(parseId(req.params.id)) }),
+    res.json({ session: publicSession(await memory.getStudySession(parseId(req.params.id))) }),
   );
   router.post("/quiz-score", async (req, res) => {
     const { sessionId, outputId, answers } = validate(quizFields, req.body);

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@libsql/client/web";
 import { AppError } from "../services/errors.js";
+import { migrateSources, MAX_SUBJECT_FILES } from "./studySources.js";
 
 const decodeOutput = (row) => ({
   ...row, output: JSON.parse(row.output), metadata: JSON.parse(row.metadata),
@@ -15,20 +16,23 @@ export async function createTursoMemory({ url, authToken, client = createClient(
     session_id INTEGER PRIMARY KEY REFERENCES study_sessions(id),
     token TEXT NOT NULL, lease_until INTEGER NOT NULL, state TEXT NOT NULL
   )`], "write");
+  await client.execute(migrateSources);
 
   const execute = (sql, args = []) => client.execute({ sql, args });
   async function getStudySession(id) {
     const session = (await execute(`SELECT s.*, st.name AS student_name
       FROM study_sessions s JOIN students st ON st.id = s.student_id WHERE s.id = ?`, [id])).rows[0];
     if (!session) throw new AppError(404, "Study session not found. Upload your lecture to begin.", "SESSION_NOT_FOUND");
-    const [outputs, scores] = await Promise.all([
+    const [outputs, scores, files] = await Promise.all([
       execute("SELECT * FROM generated_outputs WHERE session_id = ? ORDER BY id DESC", [id]),
       execute("SELECT * FROM quiz_results WHERE session_id = ? ORDER BY id DESC", [id]),
+      execute("SELECT * FROM lecture_files WHERE session_id = ? ORDER BY id", [id]),
     ]);
-    return { ...session, outputs: outputs.rows.map(decodeOutput), quizResults: scores.rows };
+    return { ...session, files: files.rows, outputs: outputs.rows.map(decodeOutput), quizResults: scores.rows };
   }
   async function listStudySessions() {
-    return (await execute(`SELECT s.id, s.subject, s.filename, s.created_at, st.name AS student_name
+    return (await execute(`SELECT s.id, s.subject, s.filename, s.created_at, st.name AS student_name,
+      (SELECT count(*) FROM lecture_files f WHERE f.session_id = s.id) AS file_count
       FROM study_sessions s JOIN students st ON st.id = s.student_id ORDER BY s.id DESC LIMIT 50`)).rows;
   }
   async function saveStudySession({ name, subject, filename, lectureText }) {
@@ -41,10 +45,28 @@ export async function createTursoMemory({ url, authToken, client = createClient(
         args: [Number(student.lastInsertRowid), subject, filename, lectureText],
       });
       sessionId = Number(session.lastInsertRowid);
+      await transaction.execute({ sql: "INSERT INTO lecture_files (session_id, filename, lecture_text) VALUES (?, ?, ?)",
+        args: [sessionId, filename, lectureText] });
       await transaction.commit();
     } finally {
       transaction.close();
     }
+    return getStudySession(sessionId);
+  }
+  async function addStudyFile(sessionId, { filename, lectureText }) {
+    const transaction = await client.transaction("write");
+    try {
+      const session = await transaction.execute({ sql: "SELECT id FROM study_sessions WHERE id = ?", args: [sessionId] });
+      if (!session.rows.length) throw new AppError(404, "Subject not found. Choose a saved subject.", "SESSION_NOT_FOUND");
+      const files = (await transaction.execute({ sql: "SELECT filename, lecture_text FROM lecture_files WHERE session_id = ?", args: [sessionId] })).rows;
+      if (!files.some((file) => file.filename === filename && file.lecture_text === lectureText)) {
+        if (files.length >= MAX_SUBJECT_FILES)
+          throw new AppError(400, "This subject has 50 files. Use the existing notes to study.", "FILE_LIMIT");
+        await transaction.execute({ sql: "INSERT INTO lecture_files (session_id, filename, lecture_text) VALUES (?, ?, ?)",
+          args: [sessionId, filename, lectureText] });
+      }
+      await transaction.commit();
+    } finally { transaction.close(); }
     return getStudySession(sessionId);
   }
   async function saveGeneratedOutput(sessionId, task, output, metadata) {
@@ -88,7 +110,7 @@ export async function createTursoMemory({ url, authToken, client = createClient(
     }
     return state;
   }
-  return { storage: "turso", getStudySession, listStudySessions, saveStudySession,
+  return { storage: "turso", getStudySession, listStudySessions, saveStudySession, addStudyFile,
     saveGeneratedOutput, saveQuizResult, acquireTask, saveTaskState, getTaskState,
     close: () => client.close() };
 }

@@ -1,5 +1,6 @@
 import ActionButtons from "../components/ActionButtons.jsx";
 import SessionHistory from "../components/SessionHistory.jsx";
+import SourcePicker, { selectionSize } from "../components/SourcePicker.jsx";
 import { useEffect, useRef, useState } from "react";
 import {
   BookOpen,
@@ -38,12 +39,19 @@ export default function Home() {
   const [activeTask, setActiveTask] = useState("summary");
   const [agentState, setAgentState] = useState(null);
   const [uploadKey, setUploadKey] = useState(0);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [uploadProgress, setUploadProgress] = useState("");
+  const [selectedOutputId, setSelectedOutputId] = useState(null);
   const pollTimer = useRef(null);
   const pollVersion = useRef(0);
   const busy = uploading || generating || restoring;
-  const result = session?.outputs.find(
+  const selectionTooLong = selectionSize(session?.files || [], selectedIds) > 60000;
+  const result = session?.outputs.find((output) => output.id === selectedOutputId) || session?.outputs.find(
     (output) => output.task_type === activeTask,
   );
+  useEffect(() => {
+    setSelectedIds(session?.files.map((file) => file.id) || []);
+  }, [session?.id, session?.files.length]);
 
   useEffect(() => {
     let mounted = true;
@@ -86,20 +94,31 @@ export default function Home() {
     };
   }, []);
 
-  async function upload(data) {
+  async function upload({ files, name, subject }) {
     setUploading(true);
     setError("");
+    let saved = session;
+    let completed = 0;
     try {
-      const { session: saved } = await api.upload(data);
-      setSession(saved);
-      storeSession(saved.id);
-      setAgentState(null);
-      setActiveTask("summary");
+      for (const file of files) {
+        setUploadProgress(`Uploading ${completed + 1} of ${files.length}…`);
+        const data = new FormData();
+        data.append("file", file);
+        if (!saved) { data.append("name", name); data.append("subject", subject); }
+        const response = saved ? await api.addFile(saved.id, data) : await api.upload(data);
+        saved = response.session;
+        completed++;
+        setSession(saved);
+        storeSession(saved.id);
+      }
+      if (!session) { setAgentState(null); setActiveTask("summary"); setSelectedOutputId(null); }
     } catch (e) {
-      setError(e.message);
+      setError(`${completed} of ${files.length} files saved. ${files[completed].name}: ${e.message} Your saved files are kept. Retry the remaining files below.`);
     } finally {
       setUploading(false);
+      setUploadProgress("");
     }
+    return files.slice(completed);
   }
   async function openSession(id) {
     if (busy) return;
@@ -108,6 +127,8 @@ export default function Home() {
     try {
       const { session: saved } = await api.session(id);
       setSession(saved);
+      setSelectedOutputId(null);
+      setUploadKey((key) => key + 1);
       storeSession(saved.id);
       setActiveTask(saved.outputs[0]?.task_type || "summary");
       setAgentState(saved.outputs[0] ? {
@@ -120,6 +141,7 @@ export default function Home() {
     }
   }
   function selectTask(task) {
+    setSelectedOutputId(null);
     setActiveTask(task);
     const saved = session.outputs.find((output) => output.task_type === task);
     if (saved)
@@ -130,13 +152,15 @@ export default function Home() {
       });
   }
   async function generate(task) {
-    if (!session || busy) return;
+    if (!session || busy || !selectedIds.length || selectionTooLong) return;
+    setSelectedOutputId(null);
     setGenerating(true);
     setActiveTask(task);
     setError("");
     setAgentState({
       status: "running",
       stage: "Controller",
+      task,
       trace: [],
       plan: [],
     });
@@ -153,7 +177,7 @@ export default function Home() {
     }
     pollTimer.current = setTimeout(poll, 350);
     try {
-      const { result: saved, state } = await api.generate(session.id, task);
+      const { result: saved, state } = await api.generate(session.id, task, selectedIds);
       pollVersion.current++;
       clearTimeout(pollTimer.current);
       setSession((current) => ({
@@ -175,6 +199,7 @@ export default function Home() {
     }
   }
   function reset() {
+    setSelectedOutputId(null);
     setSession(null);
     storeSession(null);
     setAgentState(null);
@@ -203,9 +228,9 @@ export default function Home() {
               <span className="status-dot" /> YOUR PERSONAL STUDY COMPANION
             </div>
             <h1>
-              Smart Study Agent
+              Your notes. Your subjects.
               <br />
-              <span>For exam preparation.</span>
+              <span>A clearer way to study.</span>
             </h1>
             <p>
               Turn your lecture notes into focused study aids.
@@ -223,13 +248,16 @@ export default function Home() {
             <span className="note-line" />
           </div>
         </section>
+        <ol className="study-steps" aria-label="Study steps">
+          <li aria-current={!session ? "step" : undefined}><span>1</span> Upload notes</li>
+          <li aria-current={session && !result ? "step" : undefined}><span>2</span> Choose an activity</li>
+          <li aria-current={result ? "step" : undefined}><span>3</span> Start studying</li>
+        </ol>
         {health && !health.aiConfigured && (
           <div className="notice">
             <AlertCircle size={18} />
             <p>
-              <strong>One-time setup:</strong> Configure the backend Gemini API key
-              in your hosting environment, or in <code>server/.env</code> locally,
-              then restart or redeploy to generate study aids.
+              <strong>Study activities are not ready yet.</strong> You can upload notes now. Ask the person managing this app to finish the AI setup.
             </p>
           </div>
         )}
@@ -261,25 +289,28 @@ export default function Home() {
               busy={busy}
               session={session}
               onReset={reset}
+              progress={uploadProgress}
             />
             <div className="small-note">
               <BookOpen size={17} />
               <p>
-                Your lecture is the source.
+                Your notes are the source.
                 <br />
                 Every study aid is checked against it.
               </p>
             </div>
-            <SessionHistory activeId={session?.id} busy={busy} onSelect={openSession} />
+            <SessionHistory activeId={session?.id} fileCount={session?.files.length} busy={busy} onSelect={openSession} />
           </aside>
           <div className="workspace">
-            <ActionButtons session={session} busy={busy} generating={generating} activeTask={activeTask} generate={generate} />
+            <SourcePicker session={session} selectedIds={selectedIds} onChange={setSelectedIds} busy={busy} />
+            <ActionButtons session={session} busy={busy || !selectedIds.length || selectionTooLong} generating={generating} activeTask={activeTask} generate={generate} />
             <LoadingState state={agentState} busy={generating} />
             <ResultPanel
               result={result}
               session={session}
               activeTask={activeTask}
               onSelectTask={selectTask}
+              onSelectOutput={setSelectedOutputId}
               busy={busy}
               onScore={(score) =>
                 setSession((current) => ({

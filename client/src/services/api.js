@@ -32,7 +32,8 @@ const post = (path, body) =>
 export const api = {
   health: () => request("/health"),
   upload: (data) => request("/study/upload", { method: "POST", body: data }),
-  generate: (sessionId, task) => post("/study/generate", { sessionId, task }),
+  addFile: (id, data) => request(`/study/session/${id}/files`, { method: "POST", body: data }),
+  generate: (sessionId, task, fileIds) => post("/study/generate", { sessionId, task, fileIds }),
   session: (id) => request(`/study/session/${id}`),
   sessions: () => request("/study/sessions"),
   status: (id) => request(`/study/session/${id}/status`),

@@ -4,17 +4,18 @@ import Quiz from "./Quiz.jsx";
 import { downloadStudyPdf } from "../services/pdf.js";
 
 export const taskLabels = {
-  summary: "Short Summary",
-  questions: "Important Questions",
-  mcqs: "Generate MCQs",
-  revision: "Revision Plan",
+  summary: "Short summary",
+  questions: "Practice questions",
+  mcqs: "Take a practice quiz",
+  revision: "Revision plan",
 };
-const resultLabels = { ...taskLabels, mcqs: "Practice MCQs" };
+const resultLabels = { ...taskLabels, mcqs: "Practice quiz" };
 export default function ResultPanel({
   result,
   session,
   activeTask,
   onSelectTask,
+  onSelectOutput,
   busy,
   onScore,
 }) {
@@ -56,16 +57,21 @@ export default function ResultPanel({
         </h3>
         <p>
           {session
-            ? "Choose a study aid above. Your agent will take it from here."
-            : "Upload a lecture and choose a study aid. We’ll help you turn a stack of notes into a clear next step."}
+            ? "Your notes are ready. Start with a short summary or choose another activity above."
+            : "Create a subject and upload your notes. You can add more lectures to the same subject anytime."}
         </p>
         <div className="empty-footer">
           <FileText size={14} /> Based on your material <span>·</span>
-          <CheckCheck size={15} /> Reviewed by the critic
+          <CheckCheck size={15} /> AI checked against your notes
         </div>
       </section>
     );
   const output = result.output;
+  const legacySources = session.files.slice(0, 1).map(({ id, filename }) => ({ id, filename }));
+  const sources = result.metadata.sources || legacySources;
+  const knownFiles = result.metadata.availableFileIds || sources.map((source) => source.id);
+  const addedFiles = session.files.filter((file) => !knownFiles.includes(file.id));
+  const versions = outputs.filter((item) => item.task_type === result.task_type);
   return (
     <section className="panel output-panel" aria-label="Study result">
       <div className="output-tabs" role="tablist" aria-label="Saved study aids">
@@ -89,24 +95,35 @@ export default function ResultPanel({
         </div>
         <button
           type="button"
-          className="icon-button"
+          className="button secondary download-button"
           title={exporting ? "Preparing PDF…" : "Download result as PDF"}
           aria-label="Download result as PDF"
           aria-busy={exporting}
           disabled={exporting}
           onClick={download}
         >
-          <Download size={18} />
+          <Download size={18} /> Download PDF
         </button>
       </div>
       {exporting && <p className="muted" role="status">Preparing your PDF…</p>}
       {exportError && <p className="field-error" role="alert">{exportError}</p>}
       <div className="result-meta">
         <span>
-          <CheckCheck size={14} /> Critic checked
+          <CheckCheck size={14} /> AI checked against your notes
           {result.metadata.revisionCount ? " · revised once" : ""}
         </span>
         <span>{session.subject}</span>
+      </div>
+      <div className="source-summary">
+        <p><strong>Notes used:</strong> {sources.map((source) => source.filename).join(", ")}</p>
+        {!!addedFiles.length && <p className="updated-notes" role="status">{addedFiles.length} new {addedFiles.length === 1 ? "file was" : "files were"} added after this result. Choose an activity above to include your new notes.</p>}
+        {versions.length > 1 && <label>Saved versions
+          <select value={result.id} disabled={busy} onChange={(event) => onSelectOutput(Number(event.target.value))}>
+            {versions.map((item, index) => <option key={item.id} value={item.id}>
+              {index === 0 ? "Latest" : `Version ${versions.length - index}`} · {new Date(item.created_at).toLocaleString()} · {(item.metadata.sources || legacySources).map((source) => source.filename).join(", ")}
+            </option>)}
+          </select>
+        </label>}
       </div>
       <div className="output-body">
         {result.task_type === "summary" && (

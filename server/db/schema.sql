@@ -17,6 +17,13 @@
       output TEXT NOT NULL, metadata TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     );
+    CREATE TABLE IF NOT EXISTS lecture_files (
+      id INTEGER PRIMARY KEY,
+      session_id INTEGER NOT NULL REFERENCES study_sessions(id),
+      filename TEXT NOT NULL,
+      lecture_text TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    );
     CREATE TABLE IF NOT EXISTS quiz_results (
       id INTEGER PRIMARY KEY,
       session_id INTEGER NOT NULL REFERENCES study_sessions(id),
