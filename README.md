@@ -16,9 +16,10 @@ Students often have lecture notes but need help turning them into useful exam-pr
 - Live agent progress, expandable task plan and execution trace.
 - Strict JSON validation, a critic review, and **at most one revision** followed by another review.
 - SQLite persistence for students, lectures, outputs, reviews, and quiz scores.
-- Last-session restoration, a picker for the 50 most recent sessions, saved output tabs, and JSON downloads.
+- Last-session restoration, a picker for the 50 most recent sessions, saved output tabs, and PDF downloads.
 - Explicit insufficient-information responses for lectures too thin to support the task.
 - Basic write rate limiting (60 requests/minute per local server process).
+- PDF downloads include lecture details, headings, page numbers, and a separate MCQ answer key. PDFs are generated locally in the browser without another AI request.
 - Responsive React interface; no heavy UI or agent framework.
 
 ## Stack and requirements
@@ -160,7 +161,7 @@ Student AI Agent/
 │   │   │   ├── SessionHistory.jsx
 │   │   │   └── Quiz.jsx
 │   │   ├── pages/Home.jsx
-│   │   ├── services/api.js
+│   │   ├── services/{api,pdf}.js
 │   │   ├── App.jsx
 │   │   ├── main.jsx
 │   │   └── styles.css
@@ -274,7 +275,7 @@ It therefore demonstrates a small goal-based, planning, LLM-based, tool-using ag
 4. Select **Important Questions** for written exam practice.
 5. Select **Generate MCQs**, answer all ten, and choose **Check my answers**. Review explanations and the saved score.
 6. Select **Revision Plan** to organize study time.
-7. Switch between the saved aid tabs, download a result as JSON, reload to restore the last session, or use **Saved lectures** to reopen an earlier lecture.
+7. Switch between the saved aid tabs, download a result as PDF, reload to restore the last session, or use **Saved lectures** to reopen an earlier lecture.
 
 ## Verification
 
@@ -307,7 +308,7 @@ Regenerate the sample PDF/DOCX, if desired, with `python3 scripts/create-samples
 - Text-based PDF only: no OCR for scanned pages, handwriting, images, or equations. Password-protected or damaged files may not extract. PDF/DOCX layout and tables may lose structure.
 - AI can still make mistakes, including in the critic. It may omit topics or struggle to produce ten distinct MCQs from very short notes. Prompt injection protections reduce risk but cannot guarantee factual grounding.
 - No live AI validation is possible without a configured Gemini key and quota. Billing and model access are controlled by the Gemini account.
-- Quiz answers are part of the saved output/API response and JSON export. The quiz is a self-study aid, not a secure examination system.
+- Quiz answers are part of the saved output/API response and PDF export. The quiz is a self-study aid, not a secure examination system.
 - Four simultaneous generations per server process, one per session. Progress traces are held in memory; accepted output metadata is saved. No background job queue or restart recovery.
 - The picker shows the 50 latest sessions; older sessions remain accessible by ID through the API. There is no search, deletion, or weak-topic tracking yet.
 - No OpenRouter adapter yet, no vector retrieval, and no multi-file lecture collection.

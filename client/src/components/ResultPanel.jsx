@@ -1,5 +1,7 @@
 import { BookOpen, CheckCheck, Download, FileText } from "lucide-react";
+import { useState } from "react";
 import Quiz from "./Quiz.jsx";
+import { downloadStudyPdf } from "../services/pdf.js";
 
 export const taskLabels = {
   summary: "Short Summary",
@@ -8,17 +10,6 @@ export const taskLabels = {
   revision: "Revision Plan",
 };
 const resultLabels = { ...taskLabels, mcqs: "Practice MCQs" };
-function download(result) {
-  const blob = new Blob([JSON.stringify(result.output, null, 2)], {
-    type: "application/json",
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `study-${result.task_type}.json`;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
 export default function ResultPanel({
   result,
   session,
@@ -27,6 +18,19 @@ export default function ResultPanel({
   busy,
   onScore,
 }) {
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+  async function download() {
+    setExporting(true);
+    setExportError("");
+    try {
+      await downloadStudyPdf(result, session);
+    } catch {
+      setExportError("Unable to create the PDF. Please try downloading again.");
+    } finally {
+      setExporting(false);
+    }
+  }
   const outputs = session?.outputs || [];
   const available = Object.keys(taskLabels).filter((task) =>
     outputs.some((o) => o.task_type === task),
@@ -86,13 +90,17 @@ export default function ResultPanel({
         <button
           type="button"
           className="icon-button"
-          title="Download result as JSON"
-          aria-label="Download result as JSON"
-          onClick={() => download(result)}
+          title={exporting ? "Preparing PDF…" : "Download result as PDF"}
+          aria-label="Download result as PDF"
+          aria-busy={exporting}
+          disabled={exporting}
+          onClick={download}
         >
           <Download size={18} />
         </button>
       </div>
+      {exporting && <p className="muted" role="status">Preparing your PDF…</p>}
+      {exportError && <p className="field-error" role="alert">{exportError}</p>}
       <div className="result-meta">
         <span>
           <CheckCheck size={14} /> Critic checked

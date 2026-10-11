@@ -1,5 +1,22 @@
 import { test, expect } from "@playwright/test";
 import path from "node:path";
+import { readFile } from "node:fs/promises";
+import { PDFParse } from "pdf-parse";
+
+async function readDownloadedPdf(page, task) {
+  const pending = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download result as PDF" }).click();
+  const download = await pending;
+  expect(download.suggestedFilename()).toBe(`study-${task}.pdf`);
+  const bytes = await readFile(await download.path());
+  expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
+  const parser = new PDFParse({ data: new Uint8Array(bytes) });
+  try {
+    return await parser.getText();
+  } finally {
+    await parser.destroy();
+  }
+}
 
 async function uploadLecture(page) {
   await page.goto("/");
@@ -62,9 +79,19 @@ test("complete lecture workflow, four aids, quiz scoring and reload", async ({
     path: "test-results/desktop-result.png",
     fullPage: true,
   });
-  const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download result as JSON" }).click();
-  expect((await download).suggestedFilename()).toBe("study-summary.json");
+  for (const [task, tab, expectedText] of [
+    ["summary", "Short Summary", ["Overview", "Key Points to Remember", "Ground study material"]],
+    ["questions", "Important Questions", ["Short Questions", "Conceptual Questions", "Why limit the revision loop?"]],
+    ["mcqs", "Practice MCQs", ["What perceives the environment?", "Answer Key and Explanations", "Sensors provide percepts"]],
+    ["revision", "Revision Plan", ["Importance: High", "45 minutes", "What to Focus On"]],
+  ]) {
+    await page.getByRole("tab", { name: tab, exact: true }).click();
+    const pdf = await readDownloadedPdf(page, task);
+    for (const text of ["Ayesha Khan", "Artificial Intelligence", "lecture.pdf", ...expectedText]) {
+      expect(pdf.text).toContain(text);
+    }
+    if (task === "mcqs") expect(pdf.total).toBeGreaterThanOrEqual(2);
+  }
   expect(errors).toEqual([]);
 });
 test("mobile layout and upload validation", async ({ page }) => {
